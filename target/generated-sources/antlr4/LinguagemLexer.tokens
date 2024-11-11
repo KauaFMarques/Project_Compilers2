@@ -1,0 +1,10 @@
+T__0=1
+T__1=2
+PC_PRINT=3
+ESCAPE=4
+STRING=5
+WS=6
+'('=1
+')'=2
+'print'=3
+'\\'=4
