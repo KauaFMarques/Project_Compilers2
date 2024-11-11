@@ -1,1 +1,13 @@
-print("MINHA STRING")
+var x = 5;
+var y;
+input(y);
+
+if (x < y and x == 5) {
+    print("x é menor que y e igual a 5");
+}
+
+while (x < 10) {
+    print("O valor de x é:");
+    print(x);
+    x = x + 1;
+}

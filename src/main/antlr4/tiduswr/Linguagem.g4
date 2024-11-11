@@ -1,9 +1,56 @@
 grammar Linguagem;
 
-print: PC_PRINT '(' STRING ')';
-inicial: print;
+programa: comando+;
 
-PC_PRINT: 'print';
-ESCAPE: '\\';
-STRING: '"' (ESCAPE | ~["\n])* '"';
-WS: [ \r\n\t] -> skip;
+comando: declaracao
+       | atribuicao
+       | impressao
+       | entrada
+       | if_stmt
+       | while_stmt
+       ;
+
+declaracao: 'var' ID ('=' expr)? ';';
+atribuicao: ID '=' expr ';';
+impressao: 'print' '(' (expr | STRING) ')' ';';
+entrada: 'input' '(' ID ')' ';';
+
+if_stmt: 'if' '(' expr_bool ')' bloco;
+while_stmt: 'while' '(' expr_bool ')' bloco;
+
+bloco: '{' comando* '}';
+
+expr_bool: expr_bool 'and' expr_bool
+         | expr_bool 'or' expr_bool
+         | expr_rel
+         | 'true'
+         | 'false'
+         ;
+
+expr_rel: expr op_rel expr;
+
+op_rel: '<' | '>' | '<=' | '>=' | '==' | '!=';
+
+expr: expr op=('+'|'-') termo
+    | termo
+    ;
+
+termo: termo op=('*'|'/') fator
+     | fator
+     ;
+
+fator: fator '^' potencia
+     | potencia
+     ;
+
+potencia: NUM
+        | ID
+        | '(' expr ')'
+        ;
+
+// Tokens
+ID: [a-zA-Z_][a-zA-Z0-9_]*;
+NUM: [0-9]+('.'[0-9]+)?;
+STRING: '"' (~["\r\n] | '\\"')* '"';
+WS: [ \t\r\n]+ -> skip;
+COMMENT: '//' ~[\r\n]* -> skip;
