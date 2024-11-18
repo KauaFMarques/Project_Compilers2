@@ -1,14 +1,13 @@
 var x = 5;
-var y;
-input(y);
+var y = 10;
 
-if (x < y and x == 5) {
-    print("x é menor que y e igual a 5");
-    x = x + 1;
+if (x < y and true) {
+    print("x é menor que y");
+} else {
+    print("x não é menor que y");
 }
 
-while (x < 10) {
-    print("O valor de x é:");
+while (x < y) {
     print(x);
     x = x + 1;
 }

@@ -2,25 +2,67 @@ package tiduswr;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Stack;
 
 public class GeradorPCode extends LinguagemBaseVisitor<Void> {
-    private Map<String, Integer> variaveis = new HashMap<>();
-    private int proxEndereco = 0;
-    private int labelCount = 0;
+    private Map<String, Integer> variaveis;
+    private int proxEndereco;
+    private int labelCount;
+    private Stack<String> breakLabels;
+    private Stack<String> continueLabels;
     
+    public GeradorPCode() {
+        this.variaveis = new HashMap<>();
+        this.proxEndereco = 0;
+        this.labelCount = 0;
+        this.breakLabels = new Stack<>();
+        this.continueLabels = new Stack<>();
+    }
+
     private String novoLabel() {
         return "L" + (labelCount++);
+    }
+
+    private void gerarCodigo(String instrucao) {
+        System.out.println(instrucao);
+    }
+
+    @Override
+    public Void visitPrograma(LinguagemParser.ProgramaContext ctx) {
+        // Visita todos os comandos do programa
+        ctx.comando().forEach(this::visit);
+        // Adiciona instrução de parada ao final
+        gerarCodigo("stp");
+        return null;
     }
 
     @Override
     public Void visitDeclaracao(LinguagemParser.DeclaracaoContext ctx) {
         String id = ctx.ID().getText();
-        variaveis.put(id, proxEndereco++);
-        
-        if (ctx.expr() != null) {
+        if (!variaveis.containsKey(id)) {
+            variaveis.put(id, proxEndereco++);
+            
+            if (ctx.expr() != null) {
+                // Se houver expressão de inicialização
+                visit(ctx.expr());
+                gerarCodigo("lda #" + variaveis.get(id));
+                gerarCodigo("sto");
+            }
+        } else {
+            throw new RuntimeException("Erro: Variável '" + id + "' já declarada.");
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAtribuicao(LinguagemParser.AtribuicaoContext ctx) {
+        String id = ctx.ID().getText();
+        if (variaveis.containsKey(id)) {
             visit(ctx.expr());
-            System.out.println("lda #" + variaveis.get(id));
-            System.out.println("sto");
+            gerarCodigo("lda #" + variaveis.get(id));
+            gerarCodigo("sto");
+        } else {
+            throw new RuntimeException("Erro: Variável '" + id + "' não declarada.");
         }
         return null;
     }
@@ -29,32 +71,46 @@ public class GeradorPCode extends LinguagemBaseVisitor<Void> {
     public Void visitImpressao(LinguagemParser.ImpressaoContext ctx) {
         if (ctx.expr() != null) {
             visit(ctx.expr());
-        } else {
-            System.out.println("ldc " + ctx.STRING().getText());
+        } else if (ctx.STRING() != null) {
+            String str = ctx.STRING().getText();
+            // Remove as aspas do início e fim
+            str = str.substring(1, str.length() - 1);
+            gerarCodigo("ldc " + str);
         }
-        System.out.println("wri");
+        gerarCodigo("wri");
         return null;
     }
 
     @Override
     public Void visitEntrada(LinguagemParser.EntradaContext ctx) {
         String id = ctx.ID().getText();
-        System.out.println("rd");
-        System.out.println("lda #" + variaveis.get(id));
-        System.out.println("sto");
+        if (variaveis.containsKey(id)) {
+            gerarCodigo("rd");
+            gerarCodigo("lda #" + variaveis.get(id));
+            gerarCodigo("sto");
+        } else {
+            throw new RuntimeException("Erro: Variável '" + id + "' não declarada.");
+        }
         return null;
     }
 
     @Override
     public Void visitIf_stmt(LinguagemParser.If_stmtContext ctx) {
         String endLabel = novoLabel();
-        
+        String elseLabel = ctx.bloco().size() > 1 ? novoLabel() : endLabel;
+
         visit(ctx.expr_bool());
-        System.out.println("fjp " + endLabel);
-        
-        visit(ctx.bloco());
-        System.out.println(endLabel + ":");
-        
+        gerarCodigo("fjp " + elseLabel);
+
+        visit(ctx.bloco(0));  // First block (if block)
+
+        if (ctx.bloco().size() > 1) {
+            gerarCodigo("ujp " + endLabel);
+            gerarCodigo(elseLabel + ":");
+            visit(ctx.bloco(1));  // Second block (else block)
+        }
+
+        gerarCodigo(endLabel + ":");
         return null;
     }
 
@@ -62,17 +118,121 @@ public class GeradorPCode extends LinguagemBaseVisitor<Void> {
     public Void visitWhile_stmt(LinguagemParser.While_stmtContext ctx) {
         String startLabel = novoLabel();
         String endLabel = novoLabel();
-        
-        System.out.println(startLabel + ":");
+
+        breakLabels.push(endLabel);
+        continueLabels.push(startLabel);
+
+        gerarCodigo(startLabel + ":");
         visit(ctx.expr_bool());
-        System.out.println("fjp " + endLabel);
-        
+        gerarCodigo("fjp " + endLabel);
+
         visit(ctx.bloco());
-        System.out.println("ujp " + startLabel);
-        System.out.println(endLabel + ":");
-        
+        gerarCodigo("ujp " + startLabel);
+
+        gerarCodigo(endLabel + ":");
+
+        breakLabels.pop();
+        continueLabels.pop();
         return null;
     }
 
-    // Implemente os outros métodos visitXXX para expressões e operações...
+    @Override
+    public Void visitExpr_bool(LinguagemParser.Expr_boolContext ctx) {
+        if (ctx.expr_bool().size() == 2) {
+            visit(ctx.expr_bool(0));
+            visit(ctx.expr_bool(1));
+            String op = ctx.getChild(1).getText();
+            gerarCodigo(op.equals("and") ? "and" : "or");
+        } else if (ctx.expr_rel() != null) {
+            visit(ctx.expr_rel());
+        } else {
+            gerarCodigo("ldc " + ctx.getText()); // true ou false
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitExpr_rel(LinguagemParser.Expr_relContext ctx) {
+        visit(ctx.expr(0));
+        visit(ctx.expr(1));
+        
+        switch (ctx.op_rel().getText()) {
+            case "<":
+                gerarCodigo("let");
+                break;
+            case ">":
+                gerarCodigo("grt");
+                break;
+            case "<=":
+                gerarCodigo("lte");
+                break;
+            case ">=":
+                gerarCodigo("gte");
+                break;
+            case "==":
+                gerarCodigo("equ");
+                break;
+            case "!=":
+                gerarCodigo("neq");
+                break;
+        }
+        return null;
+    }
+
+    @Override
+public Void visitExpr(LinguagemParser.ExprContext ctx) {
+    visit(ctx.termo(0));
+    for (int i = 1; i < ctx.termo().size(); i++) {
+        visit(ctx.termo(i));
+        // Use getText() on the specific child token
+        if (ctx.getChild(2*i - 1).getText().equals("+")) {
+            gerarCodigo("add");
+        } else {
+            gerarCodigo("sub");
+        }
+    }
+    return null;
+}
+
+@Override
+public Void visitTermo(LinguagemParser.TermoContext ctx) {
+    visit(ctx.fator(0));
+    for (int i = 1; i < ctx.fator().size(); i++) {
+        visit(ctx.fator(i));
+        // Use getText() on the specific child token
+        if (ctx.getChild(2*i - 1).getText().equals("*")) {
+            gerarCodigo("mul");
+        } else {
+            gerarCodigo("div");
+        }
+    }
+    return null;
+}
+
+    @Override
+    public Void visitFator(LinguagemParser.FatorContext ctx) {
+        visit(ctx.potencia(0));
+        for (int i = 1; i < ctx.potencia().size(); i++) {
+            visit(ctx.potencia(i));
+            gerarCodigo("exp");
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitPotencia(LinguagemParser.PotenciaContext ctx) {
+        if (ctx.NUM() != null) {
+            gerarCodigo("ldc " + ctx.NUM().getText());
+        } else if (ctx.ID() != null) {
+            String id = ctx.ID().getText();
+            if (variaveis.containsKey(id)) {
+                gerarCodigo("lod #" + variaveis.get(id));
+            } else {
+                throw new RuntimeException("Erro: Variável '" + id + "' não declarada.");
+            }
+        } else {
+            visit(ctx.expr());
+        }
+        return null;
+    }
 }

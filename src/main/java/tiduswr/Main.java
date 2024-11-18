@@ -12,8 +12,10 @@ public class Main {
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         LinguagemParser parser = new LinguagemParser(tokens);
         
-        // Gera código P-code
+        // Create the parse tree
+        LinguagemParser.ProgramaContext tree = parser.programa();
+        
         GeradorPCode gerador = new GeradorPCode();
-        gerador.visit(parser.programa());
+        gerador.visit(tree);
     }
 }

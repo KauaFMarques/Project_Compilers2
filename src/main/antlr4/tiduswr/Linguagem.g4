@@ -15,33 +15,25 @@ atribuicao: ID '=' expr ';';
 impressao: 'print' '(' (expr | STRING) ')' ';';
 entrada: 'input' '(' ID ')' ';';
 
-if_stmt: 'if' '(' expr_bool ')' bloco;
+if_stmt: 'if' '(' expr_bool ')' bloco ('else' bloco)?;
 while_stmt: 'while' '(' expr_bool ')' bloco;
 
 bloco: '{' comando* '}';
 
-expr_bool: expr_bool 'and' expr_bool
-         | expr_bool 'or' expr_bool
+expr_bool: expr_bool ('and' | 'or') expr_bool
          | expr_rel
          | 'true'
          | 'false'
          ;
 
 expr_rel: expr op_rel expr;
-
 op_rel: '<' | '>' | '<=' | '>=' | '==' | '!=';
 
-expr: expr op=('+'|'-') termo
-    | termo
-    ;
+expr: termo (('+'|'-') termo)*;
 
-termo: termo op=('*'|'/') fator
-     | fator
-     ;
+termo: fator (('*'|'/') fator)*;
 
-fator: fator '^' potencia
-     | potencia
-     ;
+fator: potencia ('^' potencia)*;
 
 potencia: NUM
         | ID
