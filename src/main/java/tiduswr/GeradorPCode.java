@@ -1,5 +1,6 @@
 package tiduswr;
 
+import java.text.Normalizer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
@@ -17,6 +18,14 @@ public class GeradorPCode extends LinguagemBaseVisitor<Void> {
         this.labelCount = 0;
         this.breakLabels = new Stack<>();
         this.continueLabels = new Stack<>();
+    }
+
+    private String normaliarString(String str) {
+         // Normaliza a string para a forma NFD (caracteres decompostos)
+         String normalized = Normalizer.normalize(str, Normalizer.Form.NFD);
+        // Remove os caracteres de diacríticos (acentos, etc.)
+        return normalized.replaceAll("\\p{M}", "")
+                         .replaceAll("[^\\p{ASCII}]", "");
     }
 
     private String novoLabel() {
@@ -44,8 +53,9 @@ public class GeradorPCode extends LinguagemBaseVisitor<Void> {
             
             if (ctx.expr() != null) {
                 // Se houver expressão de inicialização
-                visit(ctx.expr());
-                gerarCodigo("lda #" + variaveis.get(id));
+                String endereco = "#" + variaveis.get(id);
+                gerarCodigo("lda " + endereco);
+                 visit(ctx.expr());
                 gerarCodigo("sto");
             }
         } else {
@@ -58,9 +68,10 @@ public class GeradorPCode extends LinguagemBaseVisitor<Void> {
     public Void visitAtribuicao(LinguagemParser.AtribuicaoContext ctx) {
         String id = ctx.ID().getText();
         if (variaveis.containsKey(id)) {
-            visit(ctx.expr());
-            gerarCodigo("lda #" + variaveis.get(id));
-            gerarCodigo("sto");
+            String endereco = "#" + variaveis.get(id);
+            gerarCodigo("lda " + endereco);  // Empilha o endereço da variável
+            visit(ctx.expr());  // Empilha o valor
+            gerarCodigo("sto");  // Armazena o valor no endereço
         } else {
             throw new RuntimeException("Erro: Variável '" + id + "' não declarada.");
         }
@@ -75,7 +86,9 @@ public class GeradorPCode extends LinguagemBaseVisitor<Void> {
             String str = ctx.STRING().getText();
             // Remove as aspas do início e fim
             str = str.substring(1, str.length() - 1);
-            gerarCodigo("ldc " + str);
+            // Substitui caracteres especiais
+            str = normaliarString(str);
+            gerarCodigo("ldc \"" + str + "\"");
         }
         gerarCodigo("wri");
         return null;
@@ -85,8 +98,8 @@ public class GeradorPCode extends LinguagemBaseVisitor<Void> {
     public Void visitEntrada(LinguagemParser.EntradaContext ctx) {
         String id = ctx.ID().getText();
         if (variaveis.containsKey(id)) {
-            gerarCodigo("rd");
             gerarCodigo("lda #" + variaveis.get(id));
+            gerarCodigo("rd");
             gerarCodigo("sto");
         } else {
             throw new RuntimeException("Erro: Variável '" + id + "' não declarada.");
@@ -180,41 +193,42 @@ public class GeradorPCode extends LinguagemBaseVisitor<Void> {
     }
 
     @Override
-public Void visitExpr(LinguagemParser.ExprContext ctx) {
-    visit(ctx.termo(0));
-    for (int i = 1; i < ctx.termo().size(); i++) {
-        visit(ctx.termo(i));
-        // Use getText() on the specific child token
-        if (ctx.getChild(2*i - 1).getText().equals("+")) {
-            gerarCodigo("add");
-        } else {
-            gerarCodigo("sub");
+    public Void visitExpr(LinguagemParser.ExprContext ctx) {
+        visit(ctx.termo(0));  // Empilha o primeiro termo
+        for (int i = 1; i < ctx.termo().size(); i++) {
+            visit(ctx.termo(i));  // Empilha os outros termos
+            String op = ctx.getChild(2*i - 1).getText();
+            if (op.equals("+")) {
+                gerarCodigo("add");
+            } else if (op.equals("-")) {
+                gerarCodigo("sub");
+            }
         }
+        return null;
     }
-    return null;
-}
 
-@Override
-public Void visitTermo(LinguagemParser.TermoContext ctx) {
-    visit(ctx.fator(0));
-    for (int i = 1; i < ctx.fator().size(); i++) {
-        visit(ctx.fator(i));
-        // Use getText() on the specific child token
-        if (ctx.getChild(2*i - 1).getText().equals("*")) {
-            gerarCodigo("mul");
-        } else {
-            gerarCodigo("div");
+    @Override
+    public Void visitTermo(LinguagemParser.TermoContext ctx) {
+        visit(ctx.fator(0));  // Empilha o primeiro fator
+        for (int i = 1; i < ctx.fator().size(); i++) {
+            visit(ctx.fator(i));  // Empilha os outros fatores
+            String op = ctx.getChild(2*i - 1).getText();
+            if (op.equals("*")) {
+                gerarCodigo("mul");
+            } else if (op.equals("/")) {
+                gerarCodigo("div");
+            }
         }
+        return null;
     }
-    return null;
-}
+
 
     @Override
     public Void visitFator(LinguagemParser.FatorContext ctx) {
-        visit(ctx.potencia(0));
+        visit(ctx.potencia(0));  // Empilha o primeiro valor
         for (int i = 1; i < ctx.potencia().size(); i++) {
-            visit(ctx.potencia(i));
-            gerarCodigo("exp");
+            visit(ctx.potencia(i));  // Empilha os outros valores
+            gerarCodigo("exp");  // Aplica a exponenciação
         }
         return null;
     }
